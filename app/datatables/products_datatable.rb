@@ -1,15 +1,16 @@
 class ProductsDatatable
-  delegate :params, :h, :link_to, :number_to_currency, to: :@view
+  delegate :params, :link_to, :number_to_currency, to: :@view
 
   def initialize(view)
     @view = view
   end
 
   def as_json(options = {})
+    products_relation = products
     {
       sEcho: params[:sEcho].to_i,
       iTotalRecords: Product.count,
-      iTotalDisplayRecords: products.total_entries,
+      iTotalDisplayRecords: @total_filtered || products_relation.count,
       aaData: data
     }
   end
@@ -20,8 +21,8 @@ private
     products.map do |product|
       [
         link_to(product.name, product),
-        h(product.category.name),
-        h(product.released_on.strftime("%B %e, %Y")),
+        ERB::Util.html_escape(product.category.name),
+        ERB::Util.html_escape(product.released_on.strftime("%B %e, %Y")),
         number_to_currency(product.price)
       ]
     end
@@ -29,16 +30,25 @@ private
 
   def products
     @products ||= fetch_products
+    @products
   end
 
   def fetch_products
-    products = Product.order("#{sort_column} #{sort_direction}")
-    products = products.joins(:category)
-    products = products.page(page).per_page(per_page)
+    products = Product.joins(:category).order("#{sort_column} #{sort_direction}")
+
     if params[:sSearch].present?
-      products = products.where("products.name like :search or categories.name like :search", search: "%#{params[:sSearch]}%")
+      search = "%#{params[:sSearch]}%"
+      # use ILIKE for case-insensitive search on Postgres
+      products = products.where("products.name ILIKE :search OR categories.name ILIKE :search", search: search)
     end
-    products
+
+    # store the total number of records matching the filter (before pagination)
+    @total_filtered = products.count
+
+    # apply DataTables pagination (start = offset, length = limit)
+    offset = (params[:start] || 0).to_i
+    limit  = (params[:length] || 10).to_i
+    products.offset(offset).limit(limit)
   end
 
   def page
