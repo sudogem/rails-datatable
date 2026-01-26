@@ -1,5 +1,5 @@
 # rails-datatable
 
-$ bundle exec rake db:create   
-
-$ rails server -p 3002   
+`$ bundle exec rake db:create`   
+`$ bundle exec rails db:migrate`   
+`$ rails server -p 3002`
